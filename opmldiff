@@ -23,6 +23,38 @@ class Pair
 
 end
 
+def stripSchemeFromURL(url)
+  uri = URI.parse(url)
+  return url.sub(uri.scheme + "://", "")
+#  return uri.host.sub("www.","")
+end
+
+def allFeedURLs(file, path)
+  feedURLs = []
+  file.elements.each(path) do |feed|
+    xmlUrl = feed.attributes['xmlUrl']
+    if xmlUrl != nil
+      # sometimes the URLs can be from different schemes (http and https)
+      feedURLs << stripSchemeFromURL(xmlUrl)
+    end
+  end
+  return feedURLs
+end
+
+def allFeedsNotInList(file, path, existingFeedUrls)
+  feeds = []
+  file.elements.each(path) do |feed|
+    xmlUrl = feed.attributes['xmlUrl']
+    if xmlUrl != nil
+      xmlUrl = stripSchemeFromURL(xmlUrl)
+      unless existingFeedUrls.include? xmlUrl
+        feeds << feed
+      end
+    end
+  end
+  return feeds
+end
+
 pairs = []
 feeds = []
 
@@ -54,20 +86,21 @@ for pair in pairs
     raise "Backup directory must be writable" unless pair.backup.dirname.writable?
   end
   
-  existing_feed_urls = []
   existing_opml = REXML::Document.new open(pair.opml1.to_s)
-  existing_opml.elements.each('/opml/body/outline') do |feed|
-    existing_feed_urls << feed.attributes['xmlUrl']
-  end
+
+  existing_feed_urls = allFeedURLs(existing_opml, 'opml/body/outline') + allFeedURLs(existing_opml, 'opml/body/outline/outline')
+
+  puts existing_feed_urls.count
+
 
   new_opml = REXML::Document.new open(pair.opml2.to_s)
-  new_opml.elements.each('/opml/body/outline') do |feed|
-    feeds << feed unless existing_feed_urls.include? feed.attributes['xmlUrl']
-  end
+  feeds = allFeedsNotInList(new_opml, '/opml/body/outline', existing_feed_urls) + allFeedsNotInList(new_opml, '/opml/body/outline/outline', existing_feed_urls)
 
-  File.open(pair.backup, 'w') { |f| f.write(existing_opml.to_s) }
+  puts feeds.count
+
+  # File.open(pair.backup, 'w') { |f| f.write(existing_opml.to_s) }
   
-  File.open(pair.opml1, 'w') { |f| f.write(new_opml.to_s) }
+  # File.open(pair.opml1, 'w') { |f| f.write(new_opml.to_s) }
   
 end
 
